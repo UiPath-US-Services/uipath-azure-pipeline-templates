@@ -1,0 +1,66 @@
+# Staged pipeline with an approval process for production releases.
+
+variables:
+  projectPath: Dispatcher
+
+trigger:
+  branches:
+    include:
+      - master
+      - dev
+  paths:
+    include:
+      - $(projectPath)
+
+pool:
+  vmImage: 'windows-latest'
+
+stages:
+- stage: Build
+  jobs:
+  - job: BuildJob
+    steps:
+    - task: UiPathInstallPlatform-preview@2
+    - task: UiPathPack@2
+      inputs:
+        versionType: 'AutoVersion'
+        projectJsonPath: '$(Build.SourcesDirectory)\$(projectPath)'
+        orchestratorConnection: fantastic
+        outputPath: '$(Build.ArtifactStagingDirectory)\Output'
+        
+    - publish: $(Build.ArtifactStagingDirectory)\Output
+      artifact: drop
+
+- stage: DeployToTest
+  condition: and(succeeded('Build'), startsWith(variables['Build.SourceBranchName'], 'release'))
+  jobs:
+  - job: DeployToTestJob
+    steps:
+    - download: current
+      artifact: drop
+    - task: UiPathInstallPlatform-preview@2
+    - task: UiPathDeploy@2
+      inputs:
+        orchestratorConnection: keith2
+        packagesPath: '$(Pipeline.Workspace)\drop'
+        folderName: 'Default'
+
+- stage: DeployToProd
+  condition: and(succeeded('Build'), eq(variables['Build.SourceBranchName'], 'master'))
+  jobs:
+  - deployment: DeployToProdJob
+    pool: 
+     vmImage: 'windows-latest'
+    environment: prod
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: drop
+          - task: UiPathInstallPlatform-preview@2
+          - task: UiPathDeploy@2
+            inputs:
+              orchestratorConnection: fantastic
+              packagesPath: '$(Pipeline.Workspace)\drop'
+              folderName: 'Default'
