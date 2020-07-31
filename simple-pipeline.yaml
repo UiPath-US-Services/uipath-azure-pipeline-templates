@@ -1,0 +1,52 @@
+# This template will build the nuget package for the project on a commit to the master or a release* branch,
+# then it will deploy to the 'prod' Orchestrator for the master branch, or the 'test' Orchestrator for a release* branch.
+# There is no approval step in this pipeline, though package versions are not automatically changed to latest. That must be updated manually in Orchestrator after publishing.
+
+variables:
+  # Update this to point to the path to your Project folder (folder containing the project.json).
+  projectPath: Performer
+
+trigger:
+  # Update branch triggers here.
+  branches:
+    include:
+      - master
+      - release*
+  paths:
+    include:
+      - $(projectPath)
+
+# You can switch this to use an existing build machine
+pool:
+  vmImage: 'windows-latest'
+
+steps:
+
+# Install files needed for packaging/deploying. If you're using an build machine with UiPath already installed, you can remove this line.
+- task: UiPathInstallPlatform-preview@2
+
+# Package the project.
+- task: UiPathPack@2
+  inputs:
+    # You might want to change the versionType logic.
+    versionType: 'AutoVersion'
+    projectJsonPath: '$(Build.SourcesDirectory)\$(projectPath)'
+    # This should match the name of the Orchestrator you are deploying to, which is defined in 'Service Connections' in Azure.
+    orchestratorConnection: prod
+    outputPath: '$(Build.ArtifactStagingDirectory)\Output'
+
+- task: UiPathDeploy@2
+  condition: and(succeeded(), startsWith(variables['Build.SourceBranchName'], 'release'))
+  inputs:
+    # This should match the name of the Orchestrator you are deploying to, which is defined in 'Service Connections' in Azure.
+    orchestratorConnection: test
+    packagesPath: '$(Build.ArtifactStagingDirectory)\Output'
+    folderName: 'Default'
+    
+- task: UiPathDeploy@2
+  condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'master'))
+  inputs:
+    # This should match the name of the Orchestrator you are deploying to, which is defined in 'Service Connections' in Azure.
+    orchestratorConnection: prod
+    packagesPath: '$(Build.ArtifactStagingDirectory)\Output'
+    folderName: 'Default'
