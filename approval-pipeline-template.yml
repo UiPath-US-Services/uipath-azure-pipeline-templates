@@ -1,5 +1,9 @@
 # Staged pipeline with an approval process for production releases.
+#
 # Approvals are not defined here, but rather tied to the environment. 
+#
+# As is, this pipeline template will deploy to the Test enviornment on commits to any release* branch without approvals,
+# and will deploy to the Prod environment on commits to the master branch, after approval.
 
 parameters:
 # The full path to the folder containing the project.json file for this pipeline
@@ -36,7 +40,8 @@ stages:
     - publish: $(Build.ArtifactStagingDirectory)\Output
       artifact: drop
 
-# Deploy to the Test environment. Note that this stage has no environment defined, and won't have approvals.
+# Deploy to the Test environment on commits to any release* branch.
+# Note that this stage has no environment defined, and won't have approvals.
 # For Test environment approvals, update this to look like the Prod stage, but with using the Test environment.
 - stage: DeployToTest
   condition: and(succeeded('Build'), startsWith(variables['Build.SourceBranchName'], 'release'))  # Only run if the packaging succeeded and we are on a release* branch.
@@ -54,6 +59,8 @@ stages:
         packagesPath: '$(Pipeline.Workspace)\drop'
         folderName: ${{ folderName }}
 
+# Deploy to the Prod environment on commits to the master branch.
+# Will require approvals as defined by the environment in Azure Devops.
 - stage: DeployToProd
   condition: and(succeeded('Build'), eq(variables['Build.SourceBranchName'], 'master'))
   jobs:
