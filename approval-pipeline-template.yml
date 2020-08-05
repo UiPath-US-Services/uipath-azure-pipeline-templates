@@ -1,66 +1,75 @@
 # Staged pipeline with an approval process for production releases.
+# Approvals are not defined here, but rather tied to the environment. 
 
-variables:
-  projectPath: Dispatcher
+parameters:
+# The full path to the folder containing the project.json file for this pipeline
+- name: 'projectPath'
+  default: '.'
+  type: string
+# The name of the folder to deploy the package to.
+- name: 'folderName'
+  default: 'Default'
+  type: string
+# Either AutoVersion to generate a build number or CurrentVersion to match the project.json version.
+- name: 'versioning'
+  default: 'CurrentVersion'
+  type: string
 
-trigger:
-  branches:
-    include:
-      - master
-      - dev
-  paths:
-    include:
-      - $(projectPath)
-
-pool:
-  vmImage: 'windows-latest'
-
+# This pipeline is broken into stages for the approval functionality. Stages are ran independantly, which means the pipeline can pause until the approval is received. 
 stages:
+# Build the nuget package.
 - stage: Build
   jobs:
   - job: BuildJob
+    pool:
+      vmImage: 'windows-latest'  # Change this if you have a dedicated build machine.
     steps:
-    - task: UiPathInstallPlatform-preview@2
+    - task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
     - task: UiPathPack@2
       inputs:
-        versionType: 'AutoVersion'
-        projectJsonPath: '$(Build.SourcesDirectory)\$(projectPath)'
-        orchestratorConnection: fantastic
+        versionType: ${{ versioning }}
+        projectJsonPath: '$(Build.SourcesDirectory)\${{ projectPath }}'
+        orchestratorConnection: OrchestratorServiceConnection  # Update this to a service connection for your Orchestrator.
         outputPath: '$(Build.ArtifactStagingDirectory)\Output'
         
+    # Publish the nuget package for later stages.
     - publish: $(Build.ArtifactStagingDirectory)\Output
       artifact: drop
 
+# Deploy to the Test environment. Note that this stage has no environment defined, and won't have approvals.
+# For Test environment approvals, update this to look like the Prod stage, but with using the Test environment.
 - stage: DeployToTest
-  condition: and(succeeded('Build'), startsWith(variables['Build.SourceBranchName'], 'release'))
+  condition: and(succeeded('Build'), startsWith(variables['Build.SourceBranchName'], 'release'))  # Only run if the packaging succeeded and we are on a release* branch.
   jobs:
   - job: DeployToTestJob
+    pool:
+      vmImage: 'windows-latest'  # Change this if you have a dedicated build machine.
     steps:
     - download: current
       artifact: drop
-    - task: UiPathInstallPlatform-preview@2
+    - task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
     - task: UiPathDeploy@2
       inputs:
-        orchestratorConnection: keith2
+        orchestratorConnection: TestOrchestratorServiceConnection  # Update this to a service connection for your Test Orchestrator.
         packagesPath: '$(Pipeline.Workspace)\drop'
-        folderName: 'Default'
+        folderName: ${{ folderName }}
 
 - stage: DeployToProd
   condition: and(succeeded('Build'), eq(variables['Build.SourceBranchName'], 'master'))
   jobs:
   - deployment: DeployToProdJob
     pool: 
-     vmImage: 'windows-latest'
-    environment: prod
+      vmImage: 'windows-latest'  # Change this if you have a dedicated build machine.
+    environment: ProdEnvironment  # Update this to your Prod Enviornment in Devops. This is where you configure the approval process.
     strategy:
       runOnce:
         deploy:
           steps:
           - download: current
             artifact: drop
-          - task: UiPathInstallPlatform-preview@2
+          - task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
           - task: UiPathDeploy@2
             inputs:
-              orchestratorConnection: fantastic
+              orchestratorConnection: ProdOrchestratorServiceConnection  # Update this to a service connection for your Prod Orchestrator.
               packagesPath: '$(Pipeline.Workspace)\drop'
-              folderName: 'Default'
+              folderName: ${{ folderName }}
