@@ -1,0 +1,37 @@
+# This file extends the approval-pipeline-template.yaml, which can be placed in a seperate repository.
+# This allows for more control and security over the pipeline, and allows you to make changes to the template that will affect all pipelines that reference it.
+# This should be placed in the root of the project directory, same location as the project's project.json
+
+variables:
+  # The full path to the folder containing the project.json file for this pipeline
+  projectPath: MyProject
+  # The name of the folder to deploy the package to.
+  folderName: Default
+  # Either AutoVersion to generate a build number or CurrentVersion to match the project.json version.
+  versioning: CurrentVersion
+
+trigger:
+  # add/remove branches that trigger this pipeline here. There are checks for the branch name in the template as well.
+  branches:
+    include:
+      - master
+      - release*
+  # Limit running this pipeline to when this directory or subdirectories have changes.
+  paths:
+    include:
+      - $(projectPath)
+
+# Link to the repository containing the templates.
+resources:
+  repositories:
+    - repository: templates  # a label for this repository definition
+      type: git              # 'git' for Azure Devops git repo, or 'github' for github
+      name: Org/Repo         # or User/Repo for github
+
+# Extend this template in the repository we added as a resource above
+extends:
+  template: approval-pipeline.yml@templates  
+  parameters:
+    projectPath: $(projectPath)
+    folderName: $(folderName)
+    versioning: $(versioning)
