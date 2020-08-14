@@ -1,5 +1,7 @@
 # Azure Devops CI/CD pipeline templates for UiPath Projects and Library
 
+### The resouces section in project-pipeline.yaml and library-pipeline.yaml points to this repository. DO NOT use the UiPath template repository for anything other than testing. It may change without notice. Please fork/replicate this repository to host it yourself and make any required modifications.
+
 ## Templates and Usage
 
 This repository contains two templates, on for projects, and one for libraries, as well as two yaml files implementing each of these templates. These templates serve as a starting point
