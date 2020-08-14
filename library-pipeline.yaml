@@ -1,0 +1,42 @@
+# Copy this file to you library's root directory (containing the project.json)
+# then update the variables and paths trigger as a appropriate.
+#
+# The resouces section points to the repository containing the pipeline templates. This is set to UiPath's repository.
+# DO NOT use the UiPath template repository for anything other than testing. It may change without notice.
+# Please fork/replicate this repository to host it yourself and make any required modifications.
+
+variables:
+  # The full path to the folder containing the project.json file for this pipeline
+  projectPath: MyLibrary
+  # The name of the folder to deploy the package to.
+  folderName: Default
+  # The orchestrator tenant to deploy to. Not used, but may be useful if deploying to multiple tenants.
+  tenant: Default
+
+# Update this trigger to specify when the pipeline should run.
+# Variables cannot be used here.
+trigger:
+  # Define what branches trigger the pipeline
+  branches:
+    include:
+      - master    # Will push to Prod after approval, push to Test without approval
+  # Define what paths to include for building this pipeline. Normally, you should add the same projectPath as above,
+  # so that any change to the project will trigger the pipeline, but it will ignore any changes to other projects.
+  paths:
+    include:
+      - MyLibrary/*  # Update this
+
+resources:
+  repositories:
+    - repository: templates
+      type: github  # use 'git' for a repo hosted in Azure DevOps
+      #endpoint: my-github-service-connection
+      name: UiPath-US-Services/uipath-azure-pipeline-templates
+
+# Use the specified template. This shouldn't need to be changed.
+extends:
+  template: library-pipeline-template.yaml@templates  # Template reference
+  parameters:
+    projectPath: $(projectPath)
+    folderName: $(folderName)
+    versioningStrategy: $(versioningStrategy)

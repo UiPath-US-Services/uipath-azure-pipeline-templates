@@ -4,7 +4,7 @@
 
 variables:
   # Update this to point to the path to your Project folder (folder containing the project.json).
-  projectPath: Performer
+  projectPath: MyProject
 
 trigger:
   # Update branch triggers here.
@@ -14,7 +14,7 @@ trigger:
       - release*
   paths:
     include:
-      - $(projectPath)
+      - MyProject/*
 
 # You can switch this to use an existing build machine
 pool:

@@ -2,7 +2,7 @@
 #
 # Approvals are not defined here, but rather tied to the environment. 
 #
-# As is, this pipeline template will deploy to the Test enviornment on commits to any release* branch without approvals,
+# As is, this pipeline template will deploy to the Test environment on commits to any release* branch without approvals,
 # and will deploy to the Prod environment on commits to the master branch, after approval.
 
 parameters:
@@ -15,27 +15,35 @@ parameters:
   default: 'Default'
   type: string
 # Either AutoVersion to generate a build number or CurrentVersion to match the project.json version.
-- name: 'versioning'
+- name: 'versioningStrategy'
   default: 'CurrentVersion'
   type: string
-
+# The environments to update the package version to the deployed version. 
+# Not required for modern folders or if you do not want to update the package version.
+- name: 'environments'
+  default: ''
+  type: string
+  
 # This pipeline is broken into stages for the approval functionality. Stages are ran independantly, which means the pipeline can pause until the approval is received. 
 stages:
 # Build the nuget package.
 - stage: Build
   jobs:
   - job: BuildJob
-    pool:
-      vmImage: 'windows-latest'  # Change this if you have a dedicated build machine.
+    pool:  # Update this if using dedicated build pool
+      vmImage: 'windows-latest'
+    workspace:
+      clean: all
     steps:
+    - script: 'echo project path: ${{ parameters.projectPath }}, folder name: ${{ parameters.folderName }}, versioning strategy: ${{ parameters.versioningStrategy }}, environments: ${{ parameters.environments }}'
+      displayName: Log parameters
     - task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
     - task: UiPathPack@2
       inputs:
-        versionType: ${{ versioning }}
-        projectJsonPath: '$(Build.SourcesDirectory)\${{ projectPath }}'
-        orchestratorConnection: OrchestratorServiceConnection  # Update this to a service connection for your Orchestrator.
+        versionType: ${{ parameters.versioningStrategy }}
+        projectJsonPath: '$(Build.SourcesDirectory)\${{ parameters.projectPath }}'
+        orchestratorConnection: Orchestrator-Dev-Default  # Update this to a service connection for your Orchestrator.
         outputPath: '$(Build.ArtifactStagingDirectory)\Output'
-        
     # Publish the nuget package for later stages.
     - publish: $(Build.ArtifactStagingDirectory)\Output
       artifact: drop
@@ -47,17 +55,20 @@ stages:
   condition: and(succeeded('Build'), startsWith(variables['Build.SourceBranchName'], 'release'))  # Only run if the packaging succeeded and we are on a release* branch.
   jobs:
   - job: DeployToTestJob
-    pool:
-      vmImage: 'windows-latest'  # Change this if you have a dedicated build machine.
+    pool:  # Update this if using dedicated build pool
+      vmImage: 'windows-latest'
+    workspace:
+      clean: all
     steps:
     - download: current
       artifact: drop
     - task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
     - task: UiPathDeploy@2
       inputs:
-        orchestratorConnection: TestOrchestratorServiceConnection  # Update this to a service connection for your Test Orchestrator.
+        orchestratorConnection: Orchestrator-Test-Default
         packagesPath: '$(Pipeline.Workspace)\drop'
-        folderName: ${{ folderName }}
+        folderName: ${{ parameters.folderName }}
+        environments: ${{ parameters.environments }}
 
 # Deploy to the Prod environment on commits to the master branch.
 # Will require approvals as defined by the environment in Azure Devops.
@@ -65,9 +76,11 @@ stages:
   condition: and(succeeded('Build'), eq(variables['Build.SourceBranchName'], 'master'))
   jobs:
   - deployment: DeployToProdJob
-    pool: 
-      vmImage: 'windows-latest'  # Change this if you have a dedicated build machine.
-    environment: ProdEnvironment  # Update this to your Prod Enviornment in Devops. This is where you configure the approval process.
+    pool:  # Update this if using dedicated build pool
+      vmImage: 'windows-latest'
+    workspace:
+      clean: all
+    environment: Production  # Update this to your Prod Enviornment in DevOps. This is where you configure the approval process.
     strategy:
       runOnce:
         deploy:
@@ -77,6 +90,7 @@ stages:
           - task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
           - task: UiPathDeploy@2
             inputs:
-              orchestratorConnection: ProdOrchestratorServiceConnection  # Update this to a service connection for your Prod Orchestrator.
+              orchestratorConnection: Orchestrator-Prod-Default  # Update this to a service connection for your Prod Orchestrator.
               packagesPath: '$(Pipeline.Workspace)\drop'
-              folderName: ${{ folderName }}
+              folderName: ${{ parameters.folderName }}
+              environments: ${{ parameters.environments }}

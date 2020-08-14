@@ -1,0 +1,91 @@
+# Staged pipeline for UiPath libraries with an approval process for production releases.
+#
+# Approvals are not defined here, but rather tied to the environment. 
+#
+# This pipeline template will deploy to the Test environment on commits to the master branch without approvals,
+# and will deploy to the Prod environment on commits to the master after approval.
+
+parameters:
+# The full path to the folder containing the project.json file for this pipeline
+- name: 'projectPath'
+  default: '.'
+  type: string
+# The name of the folder to deploy the package to.
+- name: 'folderName'
+  default: 'Default'
+  type: string
+
+  
+# This pipeline is broken into stages for the approval functionality. Stages are ran independantly, which means the pipeline can pause until the approval is received. 
+stages:
+# Build the nuget package.
+- stage: Build
+  jobs:
+  - job: BuildJob
+    pool:  # Update this if using dedicated build pool
+      vmImage: 'windows-latest'
+    workspace:
+      clean: all
+    steps:
+    - script: 'echo project path: ${{ parameters.projectPath }}, folder name: ${{ parameters.folderName }}'
+      displayName: Log parameters
+    #- task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
+    - task: UiPathPack@2
+      inputs:
+        versionType: CurrentVersion
+        projectJsonPath: '$(Build.SourcesDirectory)\${{ parameters.projectPath }}'
+        orchestratorConnection: Orchestrator-Dev-Default
+
+  # Update this to a service connection for your Orchestrator.
+        outputPath: '$(Build.ArtifactStagingDirectory)\Output'
+        
+    # Publish the nuget package for later stages.
+    - publish: $(Build.ArtifactStagingDirectory)\Output
+      artifact: drop
+
+# Deploy to the Test environment on commits to the master branch.
+# Note that this stage has no environment defined, and won't have approvals.
+# For Test environment approvals, update this to look like the Prod stage, but with using the Test environment.
+- stage: DeployToTest
+  condition: and(succeeded('Build'), eq(variables['Build.SourceBranchName'], 'master'))  # Only run if the packaging succeeded and we are on a master branch.
+  jobs:
+  - job: DeployToTestJob
+    pool:  # Update this if using dedicated build pool
+      vmImage: 'windows-latest'
+    workspace:
+      clean: all
+    steps:
+    - download: current
+      artifact: drop
+    #- task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
+    - task: UiPathDeploy@2
+      inputs:
+        orchestratorConnection: Orchestrator-Test-Default
+        packagesPath: '$(Pipeline.Workspace)\drop'
+        folderName: ${{ parameters.folderName }}
+        environments: ${{ parameters.environments }}
+
+# Deploy to the Prod environment on commits to the master branch.
+# Will require approvals as defined by the environment in Azure Devops.
+- stage: DeployToProd
+  condition: and(succeeded('Build'), eq(variables['Build.SourceBranchName'], 'master'))
+  jobs:
+  - deployment: DeployToProdJob
+    pool:  # Update this if using dedicated build pool
+      vmImage: 'windows-latest'
+    workspace:
+      clean: all
+    environment: Production  # Update this to your Prod Enviornment in Devops. This is where you configure the approval process.
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: drop
+          #- task: UiPathInstallPlatform-preview@2  # This installs required exes. Not necessary if using a dedicated build machine.
+          - task: UiPathDeploy@2
+            inputs:
+              orchestratorConnection: Orchestrator-Prod-Default  # Update this to a service connection for your Prod Orchestrator.
+              packagesPath: '$(Pipeline.Workspace)\drop'
+              folderName: ${{ parameters.folderName }}
+              environments: ${{ parameters.environments }}
