@@ -37,7 +37,7 @@ resources:
   repositories:
     - repository: templates
       type: github  # use 'git' for a repo hosted in Azure DevOps
-      #endpoint: my-github-service-connection
+      endpoint: my-github-service-connection
       name: UiPath-US-Services/uipath-azure-pipeline-templates
 
 # Use the specified template. 
