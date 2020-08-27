@@ -93,4 +93,4 @@ stages:
               orchestratorConnection: Orchestrator-Prod-Default  # Update this to a service connection for your Prod Orchestrator.
               packagesPath: '$(Pipeline.Workspace)\drop'
               folderName: ${{ parameters.folderName }}
-              #environments: ${{ parameters.environments }}
+              environments: ${{ parameters.environments }}
